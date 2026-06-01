@@ -1,0 +1,8 @@
+node_modules/
+Template/node_modules/
+.DS_Store
+dist/
+build/
+.env
+npm-debug.log
+/.vscode/
