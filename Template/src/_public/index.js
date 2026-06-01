@@ -53,6 +53,7 @@ let state = {
   bubble: [],
   lda: [],
   lda_dims: 2,
+  lda_axes: null,
   chord: [],
   mechanics: [],
   color: null,
@@ -94,13 +95,13 @@ function updateSelectionInfo() {
   let el = document.getElementById("selection_info")
   if (!el) return
   let n = state.selectedIds ? state.selectedIds.size : state.bubble.length
-  el.textContent = `${n} jogos selecionados`
+  el.textContent = `${n} games selected`
 }
 
 // re-draw only the charts that react to the brush selection
 function redrawLinked() {
   draw_bubble_matrix(state.bubble, { color: state.color, selectedIds: state.selectedIds })
-  draw_lda_plot(state.lda, state.lda_dims, { color: state.color, selectedIds: state.selectedIds })
+  draw_lda_plot(state.lda, state.lda_dims, { color: state.color, selectedIds: state.selectedIds, axes: state.lda_axes })
   updateSelectionInfo()
 }
 
@@ -112,7 +113,7 @@ function handleBrush(selectedIds) {
 function drawAll() {
   draw_parallel_coords(state.pc, { color: state.color, onBrush: handleBrush })
   draw_bubble_matrix(state.bubble, { color: state.color, selectedIds: state.selectedIds })
-  draw_lda_plot(state.lda, state.lda_dims, { color: state.color, selectedIds: state.selectedIds })
+  draw_lda_plot(state.lda, state.lda_dims, { color: state.color, selectedIds: state.selectedIds, axes: state.lda_axes })
   draw_chord(state.chord, state.mechanics, { color: state.color })
   updateSelectionInfo()
 }
@@ -122,6 +123,7 @@ let handleData = (payload) => {
   state.pc = p.pc_data || []
   state.bubble = p.bubble_data || []
   state.lda = p.lda_data || []
+  state.lda_axes = p.lda_axes || null
   state.lda_dims = p.lda_dims || 2
   state.chord = p.chord_edges || []
   state.mechanics = p.top_mechanics || []
@@ -150,7 +152,7 @@ setInterval(() => {
         draw_parallel_coords(state.pc, { color: state.color, onBrush: handleBrush })
       }
       draw_bubble_matrix(state.bubble, { color: state.color, selectedIds: state.selectedIds })
-      draw_lda_plot(state.lda, state.lda_dims, { color: state.color, selectedIds: state.selectedIds })
+      draw_lda_plot(state.lda, state.lda_dims, { color: state.color, selectedIds: state.selectedIds, axes: state.lda_axes })
       draw_chord(state.chord, state.mechanics, { color: state.color })
     }
   }

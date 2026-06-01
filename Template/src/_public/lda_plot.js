@@ -5,7 +5,18 @@ import * as d3 from "d3"
  * separation/overlap clear (Compare). When d>=3, the 3rd discriminant is
  * encoded as point size. Supports a selectedIds filter from the brush.
  */
-export function draw_lda_plot(data, lda_dims = 2, { color, selectedIds } = {}) {
+// Build an axis label from the feature->axis correlations, e.g.
+// "LDA-1: ↑Min age ↑Rating ↑Playtime"
+function axisLabel(prefix, contribs) {
+  if (!contribs || !contribs.length) return prefix
+  let top = contribs
+    .slice(0, 3)
+    .map((c) => (c.corr >= 0 ? "↑" : "↓") + c.name)
+    .join("  ")
+  return `${prefix}:  ${top}`
+}
+
+export function draw_lda_plot(data, lda_dims = 2, { color, selectedIds, axes } = {}) {
   let svg = d3.select("#lda_svg")
   if (svg.empty()) return
 
@@ -22,7 +33,7 @@ export function draw_lda_plot(data, lda_dims = 2, { color, selectedIds } = {}) {
       .attr("text-anchor", "middle")
       .attr("fill", "#888")
       .attr("font-size", 13)
-      .text("Selecione ao menos 2 categorias (com >=2 jogos cada)")
+      .text("Select at least 2 categories (each with >=2 games)")
     return
   }
 
@@ -37,7 +48,8 @@ export function draw_lda_plot(data, lda_dims = 2, { color, selectedIds } = {}) {
   const x = d3.scaleLinear().domain(d3.extent(data, (d) => d.x)).nice().range([0, innerW])
   const y = d3.scaleLinear().domain(d3.extent(data, (d) => d.y)).nice().range([innerH, 0])
 
-  const categories = color ? color.domain() : Array.from(new Set(data.map((d) => d.category)))
+  // only the groups actually present in the projection
+  const categories = Array.from(new Set(data.map((d) => d.category)))
   const col = (c) => (color ? color(c) : "#4a78b5")
 
   // size encoding for the 3rd LDA dimension when d>=3
@@ -50,10 +62,10 @@ export function draw_lda_plot(data, lda_dims = 2, { color, selectedIds } = {}) {
   // axes
   g.append("g").attr("transform", `translate(0,${innerH})`).call(d3.axisBottom(x).ticks(5))
   g.append("g").call(d3.axisLeft(y).ticks(5))
-  g.append("text").attr("class", "x_label").attr("x", innerW / 2).attr("y", innerH + 36).attr("text-anchor", "middle").text("LDA-1")
-  g.append("text").attr("class", "y_label").attr("transform", "rotate(-90)").attr("x", -innerH / 2).attr("y", -38).attr("text-anchor", "middle").text("LDA-2")
+  g.append("text").attr("class", "x_label").attr("x", innerW / 2).attr("y", innerH + 36).attr("text-anchor", "middle").attr("font-size", 11).text(axisLabel("LDA-1", axes && axes.x))
+  g.append("text").attr("class", "y_label").attr("transform", "rotate(-90)").attr("x", -innerH / 2).attr("y", -40).attr("text-anchor", "middle").attr("font-size", 11).text(axisLabel("LDA-2", axes && axes.y))
 
-  // convex hull per group
+  // convex hull per group (light, just to hint the region)
   const hulls = g.append("g")
   categories.forEach((cat) => {
     const pts = data.filter((d) => d.category === cat).map((d) => [x(d.x), y(d.y)])
@@ -75,12 +87,36 @@ export function draw_lda_plot(data, lda_dims = 2, { color, selectedIds } = {}) {
     .join("circle")
     .attr("cx", (d) => x(d.x))
     .attr("cy", (d) => y(d.y))
-    .attr("r", (d) => (hasZ && Number.isFinite(d.z) ? rScale(d.z) : 5))
+    .attr("r", (d) => (hasZ && Number.isFinite(d.z) ? rScale(d.z) : 4.5))
     .attr("fill", (d) => col(d.category))
-    .attr("opacity", 0.85)
+    .attr("opacity", 0.7)
     .attr("stroke", "#fff")
     .attr("stroke-width", 0.5)
     .classed("faded", (d) => selectedIds && !selectedIds.has(d.id))
+
+  // group centroids: big diamond per group, so the comparison between groups is
+  // readable even when the hulls overlap heavily.
+  const centroids = categories
+    .map((cat) => {
+      const pts = data.filter((d) => d.category === cat)
+      if (!pts.length) return null
+      return {
+        cat,
+        x: d3.mean(pts, (d) => d.x),
+        y: d3.mean(pts, (d) => d.y),
+      }
+    })
+    .filter(Boolean)
+
+  g.append("g")
+    .selectAll("path")
+    .data(centroids)
+    .join("path")
+    .attr("transform", (d) => `translate(${x(d.x)},${y(d.y)})`)
+    .attr("d", d3.symbol().type(d3.symbolDiamond).size(220))
+    .attr("fill", (d) => col(d.cat))
+    .attr("stroke", "#222")
+    .attr("stroke-width", 1.4)
 
   if (hasZ) {
     g.append("text")
@@ -88,7 +124,7 @@ export function draw_lda_plot(data, lda_dims = 2, { color, selectedIds } = {}) {
       .attr("y", -12)
       .attr("font-size", 11)
       .attr("fill", "#444")
-      .text("Tamanho = LDA-3")
+      .text("Size = LDA-3")
   }
 
   // legend

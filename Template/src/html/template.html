@@ -11,50 +11,55 @@
       <div class="banner">Boardgames Explorer</div>
 
       <div class="sidepanel">
-        <p class="panel-title">Task 2.1 - Exploracao</p>
+        <p class="panel-title">Task 2.1 - Exploration</p>
         <p class="panel-text">
-          Parallel Coordinates (arraste em cada eixo para filtrar) + Bubble
-          Matrix. Goal = Explore, cardinalidade Overall.
+          Parallel Coordinates (drag on each axis to filter) + Bubble Matrix.
+          Goal = Explore, cardinality Overall.
         </p>
 
         <p class="panel-title">Task 2.2 - LDA (Compare)</p>
         <p class="panel-text">
-          Projecao LDA 2D com convex hull por grupo. Goal = Compare,
-          caracteristica Group.
+          2D LDA projection with a convex hull per group. Goal = Compare,
+          characteristic Group.
         </p>
 
-        <p class="panel-title">Task 2.3 - Interacao</p>
-        <label>Categorias usadas no LDA (classes)</label>
+        <p class="panel-title">Task 2.3 - Interaction</p>
+        <label>Categories used in the LDA (classes)</label>
         <div id="class_checkboxes" class="checkbox-list"></div>
 
-        <label for="lda_dims">Dimensoes LDA</label>
+        <label for="lda_dims">LDA dimensions</label>
         <select id="lda_dims" name="lda_dims">
           <option value="2" selected>2</option>
           <option value="3">3</option>
         </select>
 
-        <div class="selection-info" id="selection_info">100 jogos selecionados</div>
-        <button id="reset_brush" class="button button-small">Limpar filtro</button>
+        <div class="selection-info" id="selection_info">100 games selected</div>
+        <button id="reset_brush" class="button button-small">Clear filter</button>
         <button id="load_data_button" class="button">Load boardgames</button>
       </div>
 
       <div class="visualizations">
         <div class="card">
-          <div class="card-title">Parallel Coordinates &mdash; exploracao multivariada (brush)</div>
+          <div class="card-title">Parallel Coordinates &mdash; multivariate exploration (brush)</div>
           <div class="chart">
             <svg class="svg_root" id="pc_svg"></svg>
           </div>
         </div>
 
         <div class="card">
-          <div class="card-title">Bubble Matrix &mdash; tempo x rating (tamanho = #mecanicas)</div>
+          <div class="card-title">Bubble Matrix &mdash; playtime &times; rating (size = #mechanics)</div>
           <div class="chart">
             <svg class="svg_root" id="bubble_svg"></svg>
           </div>
         </div>
 
         <div class="card">
-          <div class="card-title">LDA Scatter + Convex Hull &mdash; comparacao de grupos</div>
+          <div class="card-title">LDA Scatter + Convex Hull &mdash; group comparison</div>
+          <div class="card-sub" id="lda_caption">
+            Each point = 1 game; diamond = group center. The axes are
+            combinations of attributes that best separate the categories (no
+            unit). Points/centers that are close = similar profile.
+          </div>
           <div class="chart">
             <svg class="svg_root" id="lda_svg">
               <g id="g_x_axis_lda"></g>
@@ -65,7 +70,7 @@
         </div>
 
         <div class="card">
-          <div class="card-title">Chord &mdash; relacoes categoria &harr; mecanica</div>
+          <div class="card-title">Chord &mdash; category &harr; mechanic relations</div>
           <div class="chart">
             <svg class="svg_root" id="chord_svg"></svg>
           </div>

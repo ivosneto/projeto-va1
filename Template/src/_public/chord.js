@@ -21,7 +21,13 @@ export function draw_chord(edges, mechanics, { color } = {}) {
   svg.attr("viewBox", `0 0 ${width} ${height}`)
   svg.selectAll("*").remove()
 
-  const categories = color ? color.domain().slice() : Array.from(new Set(edges.map((e) => e.category)))
+  // Only categories that actually have edges become nodes (ordered by total
+  // co-occurrence) — avoids tiny zero-arcs piling labels on top of each other.
+  let catTotals = new Map()
+  for (let e of edges) catTotals.set(e.category, (catTotals.get(e.category) || 0) + e.count)
+  const categories = Array.from(catTotals.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([c]) => c)
   const mechs = mechanics && mechanics.length ? mechanics : Array.from(new Set(edges.map((e) => e.mechanic)))
 
   const nodes = [...categories, ...mechs]
@@ -95,7 +101,7 @@ export function draw_chord(edges, mechanics, { color } = {}) {
         .style("opacity", 1)
         .style("left", event.pageX + 12 + "px")
         .style("top", event.pageY + 12 + "px")
-        .html(`${nodes[d.source.index]} &harr; ${nodes[d.target.index]}<br/>co-ocorrencias: ${d.source.value}`)
+        .html(`${nodes[d.source.index]} &harr; ${nodes[d.target.index]}<br/>co-occurrences: ${d.source.value}`)
     })
     .on("mouseleave", () => tip.style("opacity", 0))
 }

@@ -113,7 +113,9 @@ export function preprocess_boardgames(games, options = {}) {
     .sort((a, b) => b.count - a.count)
     .slice(0, 10)
 
-  let lda_data = build_lda_projection(cleaned, top_categories, lda_dims)
+  let lda = build_lda_projection(cleaned, top_categories, lda_dims)
+  let lda_data = lda.points
+  let lda_axes = lda.axes
 
   // Parallel coordinates data: select numeric dimensions and counts
   let pc_data = cleaned.map((g) => ({
@@ -176,6 +178,7 @@ export function preprocess_boardgames(games, options = {}) {
     top_categories,
     all_categories,
     lda_data,
+    lda_axes,
     lda_dims,
     pc_data,
     bubble_data,
@@ -208,7 +211,8 @@ function build_lda_projection(cleaned, top_categories, lda_dims = 2) {
     ids.push(game.id)
   }
 
-  if (rows.length < 2) return []
+  const EMPTY = { points: [], axes: null }
+  if (rows.length < 2) return EMPTY
 
   let label_counts = new Map()
   for (let label of labels) {
@@ -226,10 +230,10 @@ function build_lda_projection(cleaned, top_categories, lda_dims = 2) {
     filtered_ids.push(ids[i])
   }
 
-  if (filtered_rows.length < 2) return []
+  if (filtered_rows.length < 2) return EMPTY
 
   // LDA needs at least 2 distinct groups to discriminate between.
-  if (new Set(filtered_labels).size < 2) return []
+  if (new Set(filtered_labels).size < 2) return EMPTY
 
   let standardized = standardize_rows(filtered_rows)
   const X = druid.Matrix.from(standardized)
@@ -241,13 +245,53 @@ function build_lda_projection(cleaned, top_categories, lda_dims = 2) {
     ? result.to2dArray()
     : result.to2dArray
 
-  return coords.map((xy, i) => ({
+  let points = coords.map((xy, i) => ({
     id: filtered_ids[i],
     x: xy[0],
     y: xy[1],
     z: xy.length > 2 ? xy[2] : null,
     category: filtered_labels[i],
   }))
+
+  // Describe each LDA axis by how strongly each original (standardized) feature
+  // correlates with it -> tells the user what the abstract axis "means".
+  let feature_names = ["Playtime", "#Players", "Min age", "Rating", "Reviews"]
+  let axes = {
+    x: describe_axis(standardized, coords, 0, feature_names),
+    y: describe_axis(standardized, coords, 1, feature_names),
+  }
+
+  return { points, axes }
+}
+
+// Returns the features most correlated with the given LDA axis (with sign),
+// e.g. [{ name: "Playtime", corr: 0.81 }, ...] sorted by |corr|.
+function describe_axis(standardized, coords, dim, feature_names) {
+  let axis = coords.map((c) => c[dim])
+  let nFeat = standardized[0].length
+  let contributions = []
+  for (let f = 0; f < nFeat; f++) {
+    let col = standardized.map((r) => r[f])
+    let c = pearson(col, axis)
+    contributions.push({ name: feature_names[f] || `f${f}`, corr: c })
+  }
+  contributions.sort((a, b) => Math.abs(b.corr) - Math.abs(a.corr))
+  return contributions
+}
+
+function pearson(a, b) {
+  let n = a.length
+  if (n === 0) return 0
+  let ma = a.reduce((s, x) => s + x, 0) / n
+  let mb = b.reduce((s, x) => s + x, 0) / n
+  let cov = 0, va = 0, vb = 0
+  for (let i = 0; i < n; i++) {
+    cov += (a[i] - ma) * (b[i] - mb)
+    va += (a[i] - ma) ** 2
+    vb += (b[i] - mb) ** 2
+  }
+  let d = Math.sqrt(va * vb)
+  return d === 0 ? 0 : cov / d
 }
 
 function standardize_rows(rows) {

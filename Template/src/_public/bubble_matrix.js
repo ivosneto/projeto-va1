@@ -47,7 +47,10 @@ export function draw_bubble_matrix(data, { color, selectedIds } = {}) {
   const r = d3
     .scaleSqrt()
     .domain([0, d3.max(data, (d) => d.nMechanics) || 1])
-    .range([3, 15])
+    .range([2.5, 11])
+
+  // draw big bubbles first so the small ones stay visible on top
+  const ordered = data.slice().sort((a, b) => b.nMechanics - a.nMechanics)
 
   // gridlines
   g.append("g")
@@ -81,15 +84,15 @@ export function draw_bubble_matrix(data, { color, selectedIds } = {}) {
 
   g.append("g")
     .selectAll("circle")
-    .data(data)
+    .data(ordered)
     .join("circle")
     .attr("cx", (d) => x(d.playtime_avg))
     .attr("cy", (d) => y(d.rating_value))
     .attr("r", (d) => r(d.nMechanics))
     .attr("fill", (d) => (color ? color(d.category_primary) : "#4a78b5"))
-    .attr("opacity", 0.8)
+    .attr("opacity", 0.7)
     .attr("stroke", "#fff")
-    .attr("stroke-width", 0.6)
+    .attr("stroke-width", 0.7)
     .classed("faded", (d) => selectedIds && !selectedIds.has(d.id))
     .on("mousemove", (event, d) => {
       tip
@@ -100,15 +103,16 @@ export function draw_bubble_matrix(data, { color, selectedIds } = {}) {
           `<b>${d.title || "?"}</b><br/>` +
             `Rating: ${d.rating_value?.toFixed(2)}<br/>` +
             `Playtime: ${d.playtime_avg} min<br/>` +
-            `Mecanicas: ${d.nMechanics}<br/>` +
+            `Mechanics: ${d.nMechanics}<br/>` +
             `Reviews: ${d.review_count}<br/>` +
-            `Categoria: ${d.category_primary}`
+            `Category: ${d.category_primary}`
         )
     })
     .on("mouseleave", () => tip.style("opacity", 0))
 
-  // color legend
-  const cats = color ? color.domain() : Array.from(new Set(data.map((d) => d.category_primary)))
+  // color legend — only categories actually present
+  const present = new Set(data.map((d) => d.category_primary))
+  const cats = (color ? color.domain() : Array.from(present)).filter((c) => present.has(c))
   const legend = svg
     .append("g")
     .attr("transform", `translate(${margin.left + innerW + 16},${margin.top})`)
