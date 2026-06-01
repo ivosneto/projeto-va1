@@ -19,8 +19,8 @@ const safe_first_category = (game) => {
 }
 
 export function preprocess_boardgames(games, options = {}) {
-  let top_limit = Number.isFinite(options.top_limit) ? options.top_limit : 8
   let lda_dims = Number.isFinite(options.lda_dims) ? options.lda_dims : 2
+  let requested_classes = Array.isArray(options.classes) ? options.classes : null
   let cleaned = []
 
   for (let game of games) {
@@ -68,10 +68,22 @@ export function preprocess_boardgames(games, options = {}) {
     category_counts.set(cat, (category_counts.get(cat) || 0) + 1)
   }
 
-  let top_categories = Array.from(category_counts.entries())
+  // Stable list (by frequency) used to build the category checkboxes on the client.
+  let categories_ranked = Array.from(category_counts.entries())
     .sort((a, b) => b[1] - a[1])
-    .slice(0, top_limit)
-    .map(([name]) => name)
+    .map(([name, count]) => ({ name, count }))
+  let all_categories = categories_ranked.slice(0, 12)
+
+  // The chosen classes drive the whole dashboard (color + LDA classes).
+  // If the client sends an explicit selection, honor it (keep only categories
+  // that actually exist); otherwise default to the 6 most frequent.
+  let top_categories
+  if (requested_classes && requested_classes.length > 0) {
+    top_categories = requested_classes.filter((c) => category_counts.has(c))
+  }
+  if (!top_categories || top_categories.length === 0) {
+    top_categories = categories_ranked.slice(0, 6).map((c) => c.name)
+  }
 
   let scatter_data = cleaned.map((game) => ({
     ...game,
@@ -111,18 +123,44 @@ export function preprocess_boardgames(games, options = {}) {
     playtime: g.playtime_avg,
     minplayers: g.minplayers,
     maxplayers: g.maxplayers,
-    nCategories: g.categories.length,
+    minage: g.minage,
     nMechanics: g.mechanics.length,
     category_primary: top_categories.includes(g.category_primary)
       ? g.category_primary
       : "Other",
   }))
 
-  // Chord edges: counts of category <-> mechanic
+  // Bubble matrix data: improved scatter (playtime x rating, size = #mechanics)
+  let bubble_data = cleaned.map((g) => ({
+    id: g.id,
+    title: g.title,
+    playtime_avg: g.playtime_avg,
+    rating_value: g.rating_value,
+    review_count: g.review_count,
+    nMechanics: g.mechanics.length,
+    category_primary: top_categories.includes(g.category_primary)
+      ? g.category_primary
+      : "Other",
+  }))
+
+  // Keep only the most frequent mechanics so the chord stays readable
+  let mech_counts = new Map()
+  for (let g of cleaned) {
+    for (let mech of g.mechanics) {
+      mech_counts.set(mech, (mech_counts.get(mech) || 0) + 1)
+    }
+  }
+  let top_mechanics = Array.from(mech_counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([name]) => name)
+
+  // Chord edges: counts of category <-> mechanic (top mechanics only)
   let chord_map = new Map()
   for (let g of cleaned) {
     let cat = top_categories.includes(g.category_primary) ? g.category_primary : "Other"
     for (let mech of g.mechanics) {
+      if (!top_mechanics.includes(mech)) continue
       let key = `${cat}||${mech}`
       chord_map.set(key, (chord_map.get(key) || 0) + 1)
     }
@@ -136,16 +174,20 @@ export function preprocess_boardgames(games, options = {}) {
     scatter_data,
     category_stats,
     top_categories,
+    all_categories,
     lda_data,
     lda_dims,
     pc_data,
+    bubble_data,
     chord_edges,
+    top_mechanics,
   }
 }
 
 function build_lda_projection(cleaned, top_categories, lda_dims = 2) {
   let rows = []
   let labels = []
+  let ids = []
 
   for (let game of cleaned) {
     let playtime_avg = game.playtime_avg
@@ -157,12 +199,13 @@ function build_lda_projection(cleaned, top_categories, lda_dims = 2) {
     let features = [playtime_avg, players_avg, minage, rating_value, review_log]
     if (features.some((v) => !Number.isFinite(v))) continue
 
-    let label = top_categories.includes(game.category_primary)
-      ? game.category_primary
-      : "Other"
+    // Only games whose category is one of the chosen classes take part in the
+    // LDA, so the projection compares exactly the selected groups (no "Other").
+    if (!top_categories.includes(game.category_primary)) continue
 
     rows.push(features)
-    labels.push(label)
+    labels.push(game.category_primary)
+    ids.push(game.id)
   }
 
   if (rows.length < 2) return []
@@ -174,14 +217,19 @@ function build_lda_projection(cleaned, top_categories, lda_dims = 2) {
 
   let filtered_rows = []
   let filtered_labels = []
+  let filtered_ids = []
   for (let i = 0; i < rows.length; i++) {
     let label = labels[i]
     if ((label_counts.get(label) || 0) < 2) continue
     filtered_rows.push(rows[i])
     filtered_labels.push(label)
+    filtered_ids.push(ids[i])
   }
 
   if (filtered_rows.length < 2) return []
+
+  // LDA needs at least 2 distinct groups to discriminate between.
+  if (new Set(filtered_labels).size < 2) return []
 
   let standardized = standardize_rows(filtered_rows)
   const X = druid.Matrix.from(standardized)
@@ -194,8 +242,10 @@ function build_lda_projection(cleaned, top_categories, lda_dims = 2) {
     : result.to2dArray
 
   return coords.map((xy, i) => ({
+    id: filtered_ids[i],
     x: xy[0],
     y: xy[1],
+    z: xy.length > 2 ? xy[2] : null,
     category: filtered_labels[i],
   }))
 }

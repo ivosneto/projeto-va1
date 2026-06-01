@@ -1,143 +1,115 @@
 import * as d3 from "d3"
 
-export function draw_lda_plot(data, lda_dims = 2) {
-  console.log("draw lda plot")
-  console.log(data)
-
-  const margin = {
-    top: 30,
-    bottom: 40,
-    left: 60,
-    right: 40,
-  }
-
+/**
+ * LDA scatter with a convex hull per group (category), to make group
+ * separation/overlap clear (Compare). When d>=3, the 3rd discriminant is
+ * encoded as point size. Supports a selectedIds filter from the brush.
+ */
+export function draw_lda_plot(data, lda_dims = 2, { color, selectedIds } = {}) {
   let svg = d3.select("#lda_svg")
-  let g_lda = d3.select("#g_lda")
-  let g_x_axis = d3.select("#g_x_axis_lda")
-  let g_y_axis = d3.select("#g_y_axis_lda")
+  if (svg.empty()) return
 
   let width = parseInt(svg.style("width"))
   let height = parseInt(svg.style("height"))
-
   svg.attr("viewBox", `0 0 ${width} ${height}`)
+  svg.selectAll("*").remove()
 
   if (!data || data.length === 0) {
-    g_lda.selectAll(".lda_point").remove()
+    svg
+      .append("text")
+      .attr("x", width / 2)
+      .attr("y", height / 2)
+      .attr("text-anchor", "middle")
+      .attr("fill", "#888")
+      .attr("font-size", 13)
+      .text("Selecione ao menos 2 categorias (com >=2 jogos cada)")
     return
   }
 
-  let xExtent = d3.extent(data.map((d) => d.x))
-  let yExtent = d3.extent(data.map((d) => d.y))
+  const margin = { top: 28, right: 130, bottom: 42, left: 52 }
+  const innerW = width - margin.left - margin.right
+  const innerH = height - margin.top - margin.bottom
 
-  const xScale = d3
-    .scaleLinear()
-    .domain(xExtent)
-    .nice()
-    .range([0, width - margin.left - margin.right])
-
-  const yScale = d3
-    .scaleLinear()
-    .domain(yExtent)
-    .nice()
-    .range([height - margin.top - margin.bottom, 0])
-
-  let categories = Array.from(new Set(data.map((d) => d.category)))
-  const colorScale = d3.scaleOrdinal().domain(categories).range(d3.schemeTableau10)
-
-  let points = g_lda.selectAll(".lda_point").data(data)
-
-  points
-    .enter()
-    .append("circle")
-    .attr("class", "lda_point")
-    .merge(points)
-    .attr("fill", (d) => colorScale(d.category))
-    .attr("opacity", 0.85)
-    .attr("r", 5)
-    .attr("cx", (d) => margin.left + xScale(d.x))
-    .attr("cy", (d) => margin.top + yScale(d.y))
-
-  points.exit().remove()
-
-  let x_axis = d3.axisBottom(xScale).ticks(5)
-  let y_axis = d3.axisLeft(yScale).ticks(5)
-
-  g_x_axis
-    .attr(
-      "transform",
-      "translate(" + margin.left + "," + (height - margin.bottom) + ")"
-    )
-    .call(x_axis)
-
-  g_y_axis
-    .attr("transform", "translate(" + margin.left + "," + margin.top + ")")
-    .call(y_axis)
-
-  let x_label_text = lda_dims >= 2 ? "LDA-1" : "LDA-1"
-  let x_label = g_lda.selectAll(".x_label").data([x_label_text])
-  x_label
-    .enter()
-    .append("text")
-    .attr("class", "x_label")
-    .merge(x_label)
-    .attr("x", width / 2)
-    .attr("y", height - margin.bottom / 4)
-    .attr("text-anchor", "middle")
-    .text((d) => d)
-  x_label.exit().remove()
-
-  let y_label_text = lda_dims >= 2 ? "LDA-2" : "LDA-2"
-  let y_label = g_lda.selectAll(".y_label").data([y_label_text])
-  y_label
-    .enter()
-    .append("text")
-    .attr("class", "y_label")
-    .merge(y_label)
-    .attr("x", -height / 2)
-    .attr("y", margin.left / 3)
-    .attr("text-anchor", "middle")
-    .attr("transform", "rotate(-90)")
-    .text((d) => d)
-  y_label.exit().remove()
-
-  let legend = g_lda.selectAll(".legend").data([0])
-  legend
-    .enter()
+  const g = svg
     .append("g")
-    .attr("class", "legend")
-    .merge(legend)
-    .attr("transform", `translate(${width - margin.right - 140},${margin.top})`)
+    .attr("transform", `translate(${margin.left},${margin.top})`)
 
-  let legend_items = g_lda
-    .select(".legend")
-    .selectAll(".legend_item")
-    .data(categories)
+  const x = d3.scaleLinear().domain(d3.extent(data, (d) => d.x)).nice().range([0, innerW])
+  const y = d3.scaleLinear().domain(d3.extent(data, (d) => d.y)).nice().range([innerH, 0])
 
-  let legend_enter = legend_items.enter().append("g").attr("class", "legend_item")
-  legend_enter.append("rect")
-  legend_enter.append("text")
+  const categories = color ? color.domain() : Array.from(new Set(data.map((d) => d.category)))
+  const col = (c) => (color ? color(c) : "#4a78b5")
 
-  legend_items = legend_enter.merge(legend_items)
-  legend_items.attr("transform", (d, i) => `translate(0, ${i * 18})`)
+  // size encoding for the 3rd LDA dimension when d>=3
+  const hasZ = lda_dims >= 3 && data.some((d) => Number.isFinite(d.z))
+  let rScale = null
+  if (hasZ) {
+    rScale = d3.scaleLinear().domain(d3.extent(data.filter((d) => Number.isFinite(d.z)), (d) => d.z)).range([3, 11])
+  }
 
-  legend_items
-    .select("rect")
-    .attr("width", 12)
-    .attr("height", 12)
-    .attr("fill", (d) => colorScale(d))
+  // axes
+  g.append("g").attr("transform", `translate(0,${innerH})`).call(d3.axisBottom(x).ticks(5))
+  g.append("g").call(d3.axisLeft(y).ticks(5))
+  g.append("text").attr("class", "x_label").attr("x", innerW / 2).attr("y", innerH + 36).attr("text-anchor", "middle").text("LDA-1")
+  g.append("text").attr("class", "y_label").attr("transform", "rotate(-90)").attr("x", -innerH / 2).attr("y", -38).attr("text-anchor", "middle").text("LDA-2")
 
-  legend_items
-    .select("text")
-    .attr("x", 18)
-    .attr("y", 10)
+  // convex hull per group
+  const hulls = g.append("g")
+  categories.forEach((cat) => {
+    const pts = data.filter((d) => d.category === cat).map((d) => [x(d.x), y(d.y)])
+    if (pts.length < 3) return
+    const hull = d3.polygonHull(pts)
+    if (!hull) return
+    hulls
+      .append("path")
+      .attr("class", "hull")
+      .attr("d", "M" + hull.map((p) => p.join(",")).join("L") + "Z")
+      .attr("fill", col(cat))
+      .attr("stroke", col(cat))
+  })
+
+  // points
+  g.append("g")
+    .selectAll("circle")
+    .data(data)
+    .join("circle")
+    .attr("cx", (d) => x(d.x))
+    .attr("cy", (d) => y(d.y))
+    .attr("r", (d) => (hasZ && Number.isFinite(d.z) ? rScale(d.z) : 5))
+    .attr("fill", (d) => col(d.category))
+    .attr("opacity", 0.85)
+    .attr("stroke", "#fff")
+    .attr("stroke-width", 0.5)
+    .classed("faded", (d) => selectedIds && !selectedIds.has(d.id))
+
+  if (hasZ) {
+    g.append("text")
+      .attr("x", 0)
+      .attr("y", -12)
+      .attr("font-size", 11)
+      .attr("fill", "#444")
+      .text("Tamanho = LDA-3")
+  }
+
+  // legend
+  const legend = svg
+    .append("g")
+    .attr("transform", `translate(${margin.left + innerW + 16},${margin.top})`)
+  legend
+    .append("text")
+    .attr("x", 0)
+    .attr("y", -10)
     .attr("font-size", 11)
-    .text((d) => d)
-
-  legend_items.exit().remove()
-
-  // update legend title count
-  g_lda.select(".legend").selectAll(".legend_title").data([`Groups: ${categories.length}`]).join(
-    (enter) => enter.append("text").attr("class", "legend_title").attr("x", 0).attr("y", -10).text((d) => d),
-    (update) => update.text((d) => d)
-  )
+    .attr("font-weight", "bold")
+    .text(`Groups: ${categories.length}`)
+  legend
+    .selectAll("g")
+    .data(categories)
+    .join("g")
+    .attr("transform", (d, i) => `translate(0,${i * 17})`)
+    .each(function (d) {
+      const row = d3.select(this)
+      row.append("rect").attr("width", 12).attr("height", 12).attr("fill", col(d))
+      row.append("text").attr("x", 17).attr("y", 10).attr("font-size", 11).text(d)
+    })
 }

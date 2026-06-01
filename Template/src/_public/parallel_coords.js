@@ -1,98 +1,127 @@
 import * as d3 from "d3"
 
-export function draw_parallel(data, onSelection) {
-  // data: array of objects with id, title, rating, playtime, minplayers, maxplayers, nCategories, nMechanics, category_primary
-  const container = d3.select(".parallel")
-  const svg = container.select("svg")
-  if (svg.empty()) return
+const DIMS = [
+  { key: "rating", label: "Rating" },
+  { key: "playtime", label: "Playtime (min)" },
+  { key: "minplayers", label: "Min players" },
+  { key: "maxplayers", label: "Max players" },
+  { key: "minage", label: "Min age" },
+  { key: "nMechanics", label: "#Mechanics" },
+]
 
-  const margin = { top: 30, right: 10, bottom: 10, left: 10 }
-  const width = parseInt(svg.style("width")) - margin.left - margin.right
-  const height = parseInt(svg.style("height")) - margin.top - margin.bottom
+/**
+ * Parallel coordinates with per-axis brushing.
+ * Calls onBrush(selectedIdSet | null) whenever the selection changes:
+ *  - a Set of ids when at least one axis is brushed
+ *  - null when no axis is brushed (no filter)
+ */
+export function draw_parallel_coords(data, { color, onBrush } = {}) {
+  let svg = d3.select("#pc_svg")
+  if (svg.empty() || !data || data.length === 0) return
 
-  svg.attr("viewBox", `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
+  let width = parseInt(svg.style("width"))
+  let height = parseInt(svg.style("height"))
+  svg.attr("viewBox", `0 0 ${width} ${height}`)
+  svg.selectAll("*").remove()
 
-  const dimensions = [
-    { key: "rating", label: "Rating" },
-    { key: "playtime", label: "Avg Playtime" },
-    { key: "minplayers", label: "Min Players" },
-    { key: "maxplayers", label: "Max Players" },
-    { key: "nCategories", label: "#Categories" },
-    { key: "nMechanics", label: "#Mechanics" },
-  ]
+  const margin = { top: 28, right: 24, bottom: 22, left: 24 }
+  const innerW = width - margin.left - margin.right
+  const innerH = height - margin.top - margin.bottom
 
-  const g = svg.selectAll("g.pc_layer").data([0])
-  const gEnter = g.enter().append("g").attr("class", "pc_layer")
-  const layer = gEnter.merge(g)
-  layer.selectAll(".pc_line").remove()
-  layer.selectAll(".pc_axis").remove()
-
-  const yScales = {}
-  dimensions.forEach((dim) => {
-    const extent = d3.extent(data.map((d) => d[dim.key]))
-    yScales[dim.key] = d3.scaleLinear().domain(extent).range([height, 0]).nice()
-  })
-
-  const xScale = d3.scalePoint().domain(dimensions.map((d) => d.key)).range([0, width])
-
-  // Lines
-  const line = d3.line().x((d) => xScale(d.key)).y((d) => yScales[d.key](d.value))
-
-  const paths = layer
-    .selectAll(".pc_line")
-    .data(data, (d) => d.id)
-  paths
-    .enter()
-    .append("path")
-    .attr("class", "pc_line")
-    .attr("d", (d) => line(dimensions.map((dim) => ({ key: dim.key, value: d[dim.key] }))))
-    .attr("stroke", (d) => "#888")
-    .attr("stroke-width", 1)
-    .attr("fill", "none")
-    .attr("opacity", 0.6)
-
-  // Axes + brushes
-  const axisG = layer
-    .selectAll(".pc_axis")
-    .data(dimensions)
-    .enter()
+  const root = svg
     .append("g")
-    .attr("class", "pc_axis")
-    .attr("transform", (d) => `translate(${xScale(d.key)},0)`)
+    .attr("transform", `translate(${margin.left},${margin.top})`)
 
-  axisG.append("g").each(function (d) {
-    d3.select(this).call(d3.axisLeft(yScales[d.key]).ticks(4))
+  // one vertical scale per dimension
+  const x = d3.scalePoint().domain(DIMS.map((d) => d.key)).range([0, innerW])
+  const y = {}
+  for (let dim of DIMS) {
+    let ext = d3.extent(data, (d) => d[dim.key])
+    if (ext[0] === ext[1]) ext = [ext[0] - 1, ext[1] + 1]
+    y[dim.key] = d3.scaleLinear().domain(ext).nice().range([innerH, 0])
+  }
+
+  const line = d3.line()
+  const pathFor = (d) =>
+    line(DIMS.map((dim) => [x(dim.key), y[dim.key](d[dim.key])]))
+
+  // data polylines
+  const lines = root
+    .append("g")
+    .selectAll("path")
+    .data(data)
+    .join("path")
+    .attr("class", "pc_line")
+    .attr("d", pathFor)
+    .attr("fill", "none")
+    .attr("stroke", (d) => (color ? color(d.category_primary) : "#4a78b5"))
+    .attr("stroke-width", 1.1)
+    .attr("opacity", 0.55)
+
+  // axes + brushes
+  const activeBrush = new Map() // dim.key -> [valLow, valHigh]
+
+  const axisG = root
+    .selectAll(".pc_axis")
+    .data(DIMS)
+    .join("g")
+    .attr("class", "pc_axis")
+    .attr("transform", (d) => `translate(${x(d.key)},0)`)
+
+  axisG.each(function (dim) {
+    d3.select(this).call(d3.axisLeft(y[dim.key]).ticks(5))
   })
 
-  axisG.append("text").attr("y", -8).attr("text-anchor", "middle").text((d) => d.label)
+  // axis titles
+  axisG
+    .append("text")
+    .attr("y", -10)
+    .attr("text-anchor", "middle")
+    .attr("fill", "#2b3c57")
+    .attr("font-size", 11)
+    .attr("font-weight", "bold")
+    .text((d) => d.label)
 
-  // Brush for each axis
-  axisG.append("g").attr("class", "brush").each(function (dim) {
-    d3.select(this).call(
-      d3
-        .brushY()
-        .extent([[-10, 0], [10, height]])
-        .on("brush end", function (event) {
-          const sel = event.selection
-          const active = new Set()
-          if (sel) {
-            const [y0, y1] = sel.map((v) => yScales[dim.key].invert(v))
-            data.forEach((d) => {
-              if (d[dim.key] >= y0 && d[dim.key] <= y1) active.add(d.id)
-            })
-          }
-          // compute intersection of active ids across all brushes
-          const brushes = layer.selectAll('.brush').nodes()
-          let intersection = new Set(data.map((d) => d.id))
-          brushes.forEach((bnode) => {
-            const selb = d3.select(bnode).datum()
-          })
-          // For simplicity: if any brush has selection, use that set; otherwise full set
-          let selectedIds = sel ? Array.from(active) : data.map((d) => d.id)
-          if (typeof onSelection === 'function') onSelection(selectedIds)
-        })
-    )
+  const applySelection = () => {
+    if (activeBrush.size === 0) {
+      lines.classed("faded", false)
+      if (onBrush) onBrush(null)
+      return
+    }
+    const selected = new Set()
+    data.forEach((d) => {
+      let keep = true
+      for (let [key, [lo, hi]] of activeBrush) {
+        if (d[key] < lo || d[key] > hi) {
+          keep = false
+          break
+        }
+      }
+      if (keep) selected.add(d.id)
+    })
+    lines.classed("faded", (d) => !selected.has(d.id))
+    if (onBrush) onBrush(selected)
+  }
+
+  axisG.each(function (dim) {
+    const brush = d3
+      .brushY()
+      .extent([
+        [-9, 0],
+        [9, innerH],
+      ])
+      .on("brush end", (event) => {
+        if (event.selection) {
+          let [y1, y0] = event.selection // pixels (y1 top < y0 bottom)
+          activeBrush.set(dim.key, [
+            y[dim.key].invert(y0),
+            y[dim.key].invert(y1),
+          ])
+        } else {
+          activeBrush.delete(dim.key)
+        }
+        applySelection()
+      })
+    d3.select(this).append("g").attr("class", "brush").call(brush)
   })
 }
-
-export default draw_parallel

@@ -3,59 +3,71 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>BAREBONE</title>
+    <title>Boardgames Explorer</title>
   </head>
   <body>
     <noscript> You need to enable JavaScript to run this app. </noscript>
     <div class="root" id="root">
       <div class="banner">Boardgames Explorer</div>
+
       <div class="sidepanel">
         <p class="panel-title">Task 2.1 - Exploracao</p>
         <p class="panel-text">
-          Visualizar relacao entre tempo medio de jogo e rating. O tamanho dos
-          pontos representa o numero de reviews.
+          Parallel Coordinates (arraste em cada eixo para filtrar) + Bubble
+          Matrix. Goal = Explore, cardinalidade Overall.
         </p>
-          <p class="panel-title">Task 2.2 - LDA</p>
-          <p class="panel-text">
-            Comparar grupos por categoria em um espaco 2D obtido por LDA.
-          </p>
-          <p class="panel-title">Task 2.3 - Interacao</p>
-          <label for="lda_top_n">Top categorias (LDA)</label>
-          <select id="lda_top_n" name="lda_top_n">
-            <option value="4">4</option>
-            <option value="6">6</option>
-            <option value="8" selected>8</option>
-            <option value="10">10</option>
-          </select>
-          <label for="lda_dims">Dimensoes LDA</label>
-          <select id="lda_dims" name="lda_dims">
-            <option value="2" selected>2</option>
-            <option value="3">3</option>
-          </select>
+
+        <p class="panel-title">Task 2.2 - LDA (Compare)</p>
+        <p class="panel-text">
+          Projecao LDA 2D com convex hull por grupo. Goal = Compare,
+          caracteristica Group.
+        </p>
+
+        <p class="panel-title">Task 2.3 - Interacao</p>
+        <label>Categorias usadas no LDA (classes)</label>
+        <div id="class_checkboxes" class="checkbox-list"></div>
+
+        <label for="lda_dims">Dimensoes LDA</label>
+        <select id="lda_dims" name="lda_dims">
+          <option value="2" selected>2</option>
+          <option value="3">3</option>
+        </select>
+
+        <div class="selection-info" id="selection_info">100 jogos selecionados</div>
+        <button id="reset_brush" class="button button-small">Limpar filtro</button>
         <button id="load_data_button" class="button">Load boardgames</button>
       </div>
+
       <div class="visualizations">
-        <div class="scatterplot">
-          <svg class="svg_root" id="scatterplot_svg">
-            <g id="g_x_axis_scatterplot"></g>
-            <g id="g_y_axis_scatterplot"></g>
-            <g id="g_scatterplot"></g>
-          </svg>
+        <div class="card">
+          <div class="card-title">Parallel Coordinates &mdash; exploracao multivariada (brush)</div>
+          <div class="chart">
+            <svg class="svg_root" id="pc_svg"></svg>
+          </div>
         </div>
-        <div class="side-charts">
-          <div class="lda">
+
+        <div class="card">
+          <div class="card-title">Bubble Matrix &mdash; tempo x rating (tamanho = #mecanicas)</div>
+          <div class="chart">
+            <svg class="svg_root" id="bubble_svg"></svg>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">LDA Scatter + Convex Hull &mdash; comparacao de grupos</div>
+          <div class="chart">
             <svg class="svg_root" id="lda_svg">
               <g id="g_x_axis_lda"></g>
               <g id="g_y_axis_lda"></g>
               <g id="g_lda"></g>
             </svg>
           </div>
-          <div class="barchart">
-            <svg class="svg_root" id="barchart_svg">
-              <g id="g_x_axis_barchart"></g>
-              <g id="g_y_axis_barchart"></g>
-              <g id="g_barchart"></g>
-            </svg>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Chord &mdash; relacoes categoria &harr; mecanica</div>
+          <div class="chart">
+            <svg class="svg_root" id="chord_svg"></svg>
           </div>
         </div>
       </div>

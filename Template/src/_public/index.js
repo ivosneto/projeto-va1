@@ -1,9 +1,10 @@
 import io from "socket.io-client"
 import "./app.css"
-import {configs} from "../_server/static/configs.js"
-import { draw_scatterplot } from "./scatterplot.js"
+import { configs } from "../_server/static/configs.js"
+import { draw_parallel_coords } from "./parallel_coords.js"
+import { draw_bubble_matrix } from "./bubble_matrix.js"
 import { draw_lda_plot } from "./lda_plot.js"
-import { draw_barchart } from "./barchart.js"
+import { draw_chord } from "./chord.js"
 import * as d3 from "d3"
 
 let hostname = window.location.hostname
@@ -13,89 +14,144 @@ const socketUrl = protocol + "//" + hostname + ":" + configs.port
 export const socket = io(socketUrl)
 socket.on("connect", () => {
   console.log("Connected to " + socketUrl + ".")
-  // Request initial data when connected
   requestData()
 })
 socket.on("disconnect", () => {
   console.log("Disconnected from " + socketUrl + ".")
 })
 
-/**
- * Callback, when the button is pressed to request the data from the server.
- * @param {*} parameters
- */
+/** Read the categories currently checked in the sidebar. */
+function checkedClasses() {
+  return Array.from(
+    document.querySelectorAll("#class_checkboxes input[type=checkbox]:checked")
+  ).map((el) => el.value)
+}
+
 let requestData = () => {
-  console.log("requesting boardgames data from webserver")
-  let ldaTopN = parseInt(document.getElementById("lda_top_n").value, 10)
   let ldaDims = parseInt(document.getElementById("lda_dims").value, 10)
   socket.emit("getData", {
     parameters: {
-      lda_top_n: Number.isFinite(ldaTopN) ? ldaTopN : 8,
+      lda_classes: checkedClasses(),
       lda_dims: Number.isFinite(ldaDims) ? ldaDims : 2,
     },
   })
 }
 
-/**
- * Assigning the callback to request the data on click.
- */
-document.getElementById("load_data_button").onclick = () => {
-  requestData()
-}
-
-// Auto-request when controls change so UI updates immediately
-document.getElementById("lda_top_n").onchange = () => requestData()
+document.getElementById("load_data_button").onclick = () => requestData()
 document.getElementById("lda_dims").onchange = () => requestData()
-
-/**
- * Object, that will store the loaded data.
- */
-let data = {
-  scatterplot: undefined,
-  lda: undefined,
-  lda_dims: 2,
-  barchart: undefined,
+document.getElementById("reset_brush").onclick = () => {
+  state.selectedIds = null
+  redrawLinked()
+  draw_parallel_coords(state.pc, { color: state.color, onBrush: handleBrush }) // clears brushes
 }
 
 /**
- * Callback that is called, when the requested data was sent from the server and is received in the frontend (here).
- * @param {*} payload
+ * Application state.
  */
+let state = {
+  pc: [],
+  bubble: [],
+  lda: [],
+  lda_dims: 2,
+  chord: [],
+  mechanics: [],
+  color: null,
+  selectedIds: null,
+  checkboxesBuilt: false,
+}
+
+function buildColor(all_categories) {
+  let domain = (all_categories || []).map((c) => c.name).concat(["Other"])
+  domain = Array.from(new Set(domain))
+  return d3.scaleOrdinal().domain(domain).range(d3.schemeTableau10.concat(d3.schemeSet3))
+}
+
+// Build the category checkboxes once, from the stable all_categories list.
+function buildCheckboxes(all_categories, chosen) {
+  let container = d3.select("#class_checkboxes")
+  container.selectAll("*").remove()
+  let chosenSet = new Set(chosen)
+
+  all_categories.forEach((cat) => {
+    let row = container.append("label").attr("class", "chk-row")
+    row
+      .append("input")
+      .attr("type", "checkbox")
+      .attr("value", cat.name)
+      .property("checked", chosenSet.has(cat.name))
+      .on("change", () => requestData())
+    row
+      .append("span")
+      .attr("class", "chk-swatch")
+      .style("background", state.color(cat.name))
+    row.append("span").text(cat.name)
+    row.append("span").attr("class", "chk-count").text(cat.count)
+  })
+  state.checkboxesBuilt = true
+}
+
+function updateSelectionInfo() {
+  let el = document.getElementById("selection_info")
+  if (!el) return
+  let n = state.selectedIds ? state.selectedIds.size : state.bubble.length
+  el.textContent = `${n} jogos selecionados`
+}
+
+// re-draw only the charts that react to the brush selection
+function redrawLinked() {
+  draw_bubble_matrix(state.bubble, { color: state.color, selectedIds: state.selectedIds })
+  draw_lda_plot(state.lda, state.lda_dims, { color: state.color, selectedIds: state.selectedIds })
+  updateSelectionInfo()
+}
+
+function handleBrush(selectedIds) {
+  state.selectedIds = selectedIds
+  redrawLinked()
+}
+
+function drawAll() {
+  draw_parallel_coords(state.pc, { color: state.color, onBrush: handleBrush })
+  draw_bubble_matrix(state.bubble, { color: state.color, selectedIds: state.selectedIds })
+  draw_lda_plot(state.lda, state.lda_dims, { color: state.color, selectedIds: state.selectedIds })
+  draw_chord(state.chord, state.mechanics, { color: state.color })
+  updateSelectionInfo()
+}
+
 let handleData = (payload) => {
-  console.log(`Fresh data from Webserver:`)
-  console.log(payload)
-  let processed = payload.data || {}
-  data.scatterplot = processed.scatter_data || []
-  data.lda = processed.lda_data || []
-  data.lda_dims = processed.lda_dims || 2
-  data.barchart = processed.category_stats || []
-  draw_scatterplot(data.scatterplot)
-  draw_lda_plot(data.lda, data.lda_dims)
-  draw_barchart(data.barchart)
-  // simple redraw of main charts
+  let p = payload.data || {}
+  state.pc = p.pc_data || []
+  state.bubble = p.bubble_data || []
+  state.lda = p.lda_data || []
+  state.lda_dims = p.lda_dims || 2
+  state.chord = p.chord_edges || []
+  state.mechanics = p.top_mechanics || []
+  state.color = buildColor(p.all_categories)
+  state.selectedIds = null // parameters changed -> reset filter
+
+  if (!state.checkboxesBuilt && p.all_categories) {
+    buildCheckboxes(p.all_categories, p.top_categories || [])
+  }
+  drawAll()
 }
 
 socket.on("freshData", handleData)
 
+// Redraw on container resize. Skips parallel-coords while a brush is active to
+// avoid wiping the selection.
 let width = 0
-let height = 0
-
-/**
- * This is an example for visualizations, that are not automatically scalled with the viewBox attribute.
- *
- * IMPORTANT:
- * The called function to draw the data must not do any data preprocessing!
- * To much computational load will result in stuttering and reduced responsiveness!
- */
-let checkSize = setInterval(() => {
+setInterval(() => {
   let container = d3.select(".visualizations")
+  if (container.empty()) return
   let newWidth = parseInt(container.style("width"))
-  let newHeight = parseInt(container.style("height"))
-  if (newWidth !== width || newHeight !== height) {
+  if (newWidth !== width) {
     width = newWidth
-    height = newHeight
-    if (data.scatterplot) draw_scatterplot(data.scatterplot)
-    if (data.lda) draw_lda_plot(data.lda, data.lda_dims)
-    if (data.barchart) draw_barchart(data.barchart)
+    if (state.bubble.length) {
+      if (!state.selectedIds) {
+        draw_parallel_coords(state.pc, { color: state.color, onBrush: handleBrush })
+      }
+      draw_bubble_matrix(state.bubble, { color: state.color, selectedIds: state.selectedIds })
+      draw_lda_plot(state.lda, state.lda_dims, { color: state.color, selectedIds: state.selectedIds })
+      draw_chord(state.chord, state.mechanics, { color: state.color })
+    }
   }
-}, 100)
+}, 300)

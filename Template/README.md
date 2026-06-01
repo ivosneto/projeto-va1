@@ -64,16 +64,34 @@ Observacao: dar F5 nao reinicia o servidor. Para aplicar mudancas do backend, pa
 Explorar como a qualidade percebida (rating e volume de reviews) se distribui em funcao do tempo medio de jogo, identificando padroes gerais no conjunto completo.
 
 ## Visualizacao escolhida e justificativa
-- Scatterplot com **playtime_avg** no eixo X e **rating_value** no eixo Y.
-- **Tamanho do ponto** representa `num_of_reviews` (proxy de confianca/popularidade).
-- **Cor** representa a categoria principal do jogo (top categorias, resto em "Other").
-- **Gridlines** para leitura precisa e **legenda** para reduzir ambiguidade.
+Para a exploracao Overall usamos **duas vistas complementares** (nenhuma e o scatterplot do template "as is"):
 
-**Por que e apropriado:**
-- Quantitativo x quantitativo suporta exploracao de correlacao (tempo vs rating).
-- Tamanho do ponto adiciona dimensao de confianca sem poluir o grafico.
-- Cor ajuda a perceber padroes por categoria em nivel geral.
-- Cardinalidade Overall e respeitada (dataset inteiro, sem filtros por default).
+**1. Parallel Coordinates + Brush (vista principal de exploracao)**
+- Eixos: Rating, Playtime, Min players, Max players, Min age, #Mechanics.
+- Cada jogo e uma linha; cor = categoria principal.
+- **Brushing por eixo**: arrastando em qualquer eixo filtra o conjunto e o resultado **propaga** para o Bubble Matrix e o LDA (views ligadas).
+
+**Por que e apropriado (Explore / Overall):**
+- Mostra todas as variaveis numericas ao mesmo tempo no conjunto inteiro (cardinalidade Overall).
+- Suporta achar padroes/correlacoes e outliers multivariados que um unico scatter 2D nao revela.
+- O brush transforma exploracao passiva em ativa, sem sair da cardinalidade Overall (so realca subconjuntos).
+
+**2. Bubble Matrix (scatter melhorado)**
+- X = `playtime_avg`, Y = `rating_value`, **tamanho = nº de mecanicas**, cor = categoria, **tooltip** com detalhes.
+- Da uma leitura intuitiva de tempo x qualidade com a complexidade (mecanicas) como 3a variavel.
+
+## Elementos basicos (incluidos x excluidos)
+**Incluidos (e por que):**
+- Eixos com labels e gridlines no Bubble Matrix: leitura precisa de valores.
+- Legenda de cores por categoria (consistente em todos os graficos): interpreta o canal de cor.
+- Tamanho com `scaleSqrt` (area proporcional ao valor): percepcao correta de magnitude.
+- Tooltip no Bubble Matrix: detalhe sob demanda sem poluir a visao geral.
+- Titulos de eixo nas Parallel Coordinates: identificam cada dimensao.
+
+**Excluidos (e por que):**
+- Rotulo de texto fixo em cada ponto/linha: com 100 itens geraria oclusao; resolvido via tooltip.
+- Eixo Y do Bubble Matrix comecando em zero: o rating do top-100 fica concentrado (~7.6 a 8.7); usamos o extent real com folga para discriminar melhor sem distorcer a comparacao Overall.
+- Linha de tendencia: omitida para nao sugerir correlacao que os dados nao mostram.
 
 ## Preprocessamento aplicado
 - `playtime_avg = (minplaytime + maxplaytime) / 2`.
@@ -92,20 +110,21 @@ let players_avg = (minplayers + maxplayers) / 2
 ## Como o codigo foi feito (referencias)
 **Servidor (leitura e preprocessamento)**
 - [Template/src/_server/websocket.js](Template/src/_server/websocket.js)
-  - Leitura de `data/boardgames_100.json`.
-  - Emissao de `freshData` com `scatter_data` e `lda_data`.
+  - Leitura de `data/boardgames_100.json`, emissao de `freshData`.
 - [Template/src/_server/preprocessing.js](Template/src/_server/preprocessing.js)
-  - Preprocessamento dos jogos e agregacao por categoria.
+  - Gera `pc_data` (parallel coords), `bubble_data`, `lda_data`, `chord_edges` e `top_mechanics`.
 
 **Front-end (request + desenho)**
 - [Template/src/_public/index.js](Template/src/_public/index.js)
-  - Botao carrega dados via socket e dispara os desenhos.
-- [Template/src/_public/scatterplot.js](Template/src/_public/scatterplot.js)
-  - Scatterplot com cor por categoria, tamanho por reviews e gridlines.
+  - Orquestra os desenhos, escala de cor consistente e o brushing ligado.
+- [Template/src/_public/parallel_coords.js](Template/src/_public/parallel_coords.js)
+  - Parallel coordinates com brush por eixo (callback `onBrush`).
+- [Template/src/_public/bubble_matrix.js](Template/src/_public/bubble_matrix.js)
+  - Bubble scatter com tooltip; reage ao filtro do brush.
 - [Template/src/html/template.html](Template/src/html/template.html)
-  - Ajuste do layout e texto da Task 2.1.
+  - Layout 2x2 com cards e scroll.
 - [Template/src/_public/app.css](Template/src/_public/app.css)
-  - Estilos de painel e gridlines.
+  - Estilos dos cards, tooltip, hull e estado "faded".
 
 ## Insights (primeira exploracao)
 - Os ratings do top-100 estao concentrados: media 8.09, mediana 8.07, com 80% entre 7.76 e 8.50.
@@ -146,14 +165,14 @@ Comparar categorias de jogos para verificar se grupos tem perfis distintos consi
 - Remocao de classes com menos de 2 amostras.
 
 ## Visualizacao escolhida e justificativa
-- Scatterplot 2D da projecao LDA (eixos LDA-1 e LDA-2) no painel esquerdo.
-- Bar chart permanece como apoio para contexto de categorias.
-- Cor por categoria para comparar grupos.
-- Legenda para identificar grupos rapidamente.
+- Scatterplot 2D da projecao LDA (eixos LDA-1 e LDA-2).
+- **Convex hull por grupo (categoria)**: a area de cada categoria fica explicita, deixando clara a sobreposicao/separacao entre grupos (essencial para o Goal=Compare).
+- Cor por categoria (consistente com os outros graficos) e legenda.
+- Reage ao **brush** das parallel coordinates: pontos fora da selecao ficam esmaecidos.
 
 **Por que e adequada:**
 - Apos a reducao, a distancia entre grupos representa diferencas no perfil.
-- Permite comparacao visual clara de clusters e sobreposicoes.
+- O hull resume cada grupo numa regiao, tornando a comparacao visual imediata (clusters vs sobreposicao).
 
 ## Como o codigo foi feito (referencias)
 **Servidor (LDA):**
@@ -170,56 +189,55 @@ Comparar categorias de jogos para verificar se grupos tem perfis distintos consi
 
 ---
 
-# Task 2.3 - Interacting with LDA parameters
+# Task 2.3 - Tightly integrated: Interacting with LDA parameters
 
-## Interacao implementada
-- Selecionar o numero de categorias (top-N) usadas como classes no LDA.
+## Interacoes implementadas
+Os dois tipos de interacao que o enunciado cita ("changing either the amount of output dimensions, **or the classes chosen**") estao implementados. Ambos disparam um recalculo do modelo LDA no servidor (componente *Model Building* do pipeline de VA):
+
+1. **Classes escolhidas** — `lda_classes` (checkboxes de categorias). O usuario marca exatamente **quais categorias** entram como classes do LDA. O LDA roda **somente** nos jogos dessas categorias (comparacao focada, sem "Other"); os demais graficos colorem por essas categorias + "Other". E preciso ao menos 2 categorias (com >=2 jogos cada) para o LDA discriminar — caso contrario o card mostra uma mensagem.
+2. **Dimensoes LDA** — `lda_dims` (2 / 3). Define o numero de dimensoes de saida. O scatter mostra sempre LDA-1 (X) vs LDA-2 (Y); como os dois primeiros discriminantes sao iguais para d=2 ou d=3 (so muda o sinal), **com d=3 a 3a dimensao (LDA-3) e codificada no tamanho do ponto** (rotulo "Tamanho = LDA-3"). Com d=2 os pontos tem tamanho uniforme.
+
+Cada controle tem `onchange` que chama `requestData()` ([index.js](Template/src/_public/index.js)), reenviando os parametros via socket; o servidor reprocessa e reemite `freshData`. Os checkboxes sao montados a partir da lista estavel `all_categories` (top-12 por frequencia, com swatch de cor e contagem).
+
+## Custo da interacao (mantido baixo)
+- Interacao por **selecao direta** (checkbox / dropdown), sem digitacao — baixo custo fisico e cognitivo.
+- Recalculo automatico ao marcar/desmarcar (nao exige clicar em "Load"); feedback imediato.
+- O preprocessamento pesado fica no servidor; o front-end so redesenha. A lista de categorias e o dominio das dimensoes sao pequenos e discretos, evitando estados invalidos.
+
+## Como usar para analise
+- **Escolher as classes** permite comparar exatamente os grupos de interesse (ex: so "Economic" vs "Fantasy") e ver se eles se separam no espaco LDA, sem ruido das demais categorias.
+- Incluir/remover uma categoria mostra se ela se sobrepoe (perfil parecido) ou se destaca (perfil distinto) dos outros grupos.
+- Alternar **d** permite checar se ha separacao numa 3a direcao discriminante (via tamanho).
 
 ---
 
-# Dashboard Consolidado (Tasks 2.1–2.3)
+# Dashboard implementado (visao geral)
 
-Decidimos agrupar as visualizacoes num unico painel 2x2 para facilitar a exploracao e a comparacao:
+Layout em grid 2x2 com scroll (ver [template.html](Template/src/html/template.html)). Lateral fixa com controles + descricao das tasks; cor das categorias **consistente** em todos os graficos.
 
-- Top-left: **Parallel Coordinates + Brush** (Exploracao). Permite filtrar por ranges em multiplas variaveis ao mesmo tempo.
-- Top-right: **Bubble Matrix** (Bubble/Scatter melhorado). Eixo X = `playtime_avg`, Eixo Y = `rating_value`, tamanho = `#mechanics`, cor = `category_primary`.
-- Bottom-left: **LDA Scatter** (Comparacao). Projecao LDA (2D) com legenda e suporte a atualizacao por top-N e dims.
-- Bottom-right: **Chord / Sankey-like** (Relacoes Categoria ↔ Mecanica). Mostra contagens de combinacoes categoria-mecanica.
+- **Superior esquerdo: Parallel Coordinates + Brush (Task 2.1)** — exploracao multivariada; arrastar em um eixo filtra e propaga para os outros graficos.
+- **Superior direito: Bubble Matrix (Task 2.1)** — tempo x rating, tamanho = #mecanicas, tooltip.
+- **Inferior esquerdo: LDA Scatter + Convex Hull (Task 2.2/2.3)** — comparacao de grupos; responde aos checkboxes de classes, ao d (tamanho = LDA-3) e ao brush.
+- **Inferior direito: Chord (relacoes)** — co-ocorrencia categoria ↔ mecanica (top 8 mecanicas).
 
-Arquivos principais:
-- `src/_public/parallel_coords.js` — implementa Parallel Coordinates com brushing; retorna lista de `id`s selecionados para filtrar outros graficos.
-- `src/_public/bubble_matrix.js` — bubble scatter com tooltip e eixos.
-- `src/_public/lda_plot.js` — LDA scatter (apresenta LDA-1 vs LDA-2) e legenda.
-- `src/_public/chord.js` — desenho simples de ligações entre categorias e mecânicas.
-- `src/_server/preprocessing.js` — agora retorna `pc_data` (parallel coords), `chord_edges` (category-mechanic counts), alem de `scatter_data` e `lda_data`.
+Brushing ligado: o filtro feito nas Parallel Coordinates esmaece os pontos nao selecionados no Bubble Matrix e no LDA; o contador da lateral mostra quantos jogos estao selecionados. Botao "Limpar filtro" reseta.
 
-Como usar:
-1. `npm run dev`
-2. Abra `http://localhost:3000`
-3. O dashboard carrega automaticamente. Use os controles na lateral para alterar `Top categorias (LDA)` e `Dimensoes LDA`.
-4. No canto superior esquerdo (Parallel Coordinates) arraste nas escalas (brush) para selecionar subconjuntos — os outros graficos sao atualizados com o filtro.
-5. No Bubble Matrix, passe o mouse para ver tooltip com detalhes do jogo.
+Arquivos efetivamente usados pelo app:
+- `src/_public/index.js` — orquestracao, cor consistente, brushing ligado, controles.
+- `src/_public/parallel_coords.js` — Task 2.1 (brush).
+- `src/_public/bubble_matrix.js` — Task 2.1 (scatter + tooltip).
+- `src/_public/lda_plot.js` — Task 2.2/2.3 (LDA + hull + tamanho LDA-3).
+- `src/_public/chord.js` — relacoes categoria ↔ mecanica.
+- `src/_server/websocket.js` — leitura do JSON e emissao de `freshData`.
+- `src/_server/preprocessing.js` — preprocessamento de todas as estruturas + `build_lda_projection`.
 
-Design e justificativa (resumo):
-- O Parallel Coordinates suporta exploracao multivariada (Goal=Explore).
-- O Bubble Matrix fornece uma leitura intuitiva de tempo vs rating com importancia (tamanho) e categoria (cor).
-- O LDA Scatter responde ao objetivo Compare — compara grupos no espaco reduzido.
-- O Chord mostra relacoes categoria↔mecanica para insights de co-ocorrencia.
+## Como rodar
+1. `cd Template && npm run dev`
+2. Abra `http://localhost:3000` (pagina na 3000; socket na 3231 — [configs.js](Template/src/_server/static/configs.js)).
+3. Carrega automaticamente. Marque/desmarque categorias (classes do LDA), mude as Dimensoes LDA e use o brush das parallel coordinates.
 
-Proximos passos / melhorias:
-- Adicionar convex-hulls por grupo no LDA para visualizar sobreposicao.
-- Melhorar brushing para combinar multiplos eixos (interseccao correta).
-- Otimizar chords com matriz e d3-chord para visual mais compacto.
-- Adicionar caching de respostas no servidor para parametros LDA repetidos.
-- Selecionar o numero de dimensoes do LDA (2 ou 3).
-- O grafico mostra LDA-1 vs LDA-2; quando d=3, as duas primeiras dimensoes sao exibidas.
-
-## Como usar para analise
-- Variar o top-N mostra se categorias menos frequentes mudam a separacao entre grupos.
-- Aumentar d permite observar se a separacao melhora (mesmo que a visualizacao 2D use apenas duas dimensoes).
-- Comparar a nuvem resultante com diferentes parametros ajuda a validar estabilidade dos grupos.
-
-## Onde esta no codigo
-- Controles do painel: [Template/src/html/template.html](Template/src/html/template.html)
-- Envio de parametros: [Template/src/_public/index.js](Template/src/_public/index.js)
-- Preprocessamento LDA: [Template/src/_server/preprocessing.js](Template/src/_server/preprocessing.js)
+## Melhorias futuras (nao implementadas)
+- Estender o brush ligado tambem ao Chord.
+- Permitir reordenar/agrupar mecanicas no Chord para reduzir cruzamentos.
+- Tooltip tambem nas linhas das parallel coordinates.
+- Caching no servidor para parametros LDA repetidos.

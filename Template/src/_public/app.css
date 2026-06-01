@@ -1,3 +1,9 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 html,
 body,
 head,
@@ -7,11 +13,13 @@ head,
   margin: 0px;
   width: 100%;
   overflow: hidden;
+  font-family: Verdana, Geneva, Tahoma, sans-serif;
 }
 
 .svg_root {
   width: 100%;
   height: 100%;
+  display: block;
 }
 
 #root {
@@ -25,103 +33,187 @@ head,
 .banner {
   grid-area: banner;
   background: rgb(120, 150, 196);
-
+  color: #fff;
   text-align: center;
-  line-height: 100px;
-  font-size: 40px;
+  line-height: 80px;
+  font-size: 34px;
   font-weight: bold;
-  font-family: Verdana, Geneva, Tahoma, sans-serif;
 }
 
 .sidepanel {
   grid-area: sidepanel;
-  background: rgb(202, 202, 202);
-  padding: 20px;
+  background: rgb(238, 240, 244);
+  border-right: 1px solid #d3d7df;
+  padding: 18px;
+  overflow-y: auto;
 }
 
 .panel-title {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: bold;
-  margin: 0 0 8px 0;
+  margin: 0 0 6px 0;
+  color: #2b3c57;
 }
 
 .panel-text {
-  font-size: 14px;
+  font-size: 13px;
   margin: 0 0 16px 0;
   line-height: 1.4;
+  color: #444;
 }
 
+.selection-info {
+  margin: 18px 0 8px 0;
+  font-size: 13px;
+  font-weight: bold;
+  color: #2b3c57;
+}
+
+.checkbox-list {
+  margin: 6px 0 14px 0;
+  max-height: 190px;
+  overflow-y: auto;
+  border: 1px solid #d4d8e0;
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: #fff;
+}
+
+.checkbox-list .chk-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  padding: 2px 0;
+  cursor: pointer;
+}
+
+.checkbox-list .chk-swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+
+.checkbox-list .chk-count {
+  margin-left: auto;
+  color: #888;
+  font-size: 11px;
+}
+
+/* Scrollable dashboard with a 2x2 grid of fixed-height cards */
 .visualizations {
   grid-area: visualizations;
   display: grid;
-  grid-template-columns: 60% 40%;
-  grid-template-rows: 60% 40%;
-  grid-template-areas:
-    "scatterplot sidecharts"
-    "scatterplot sidecharts";
-  gap: 12px;
-  height: calc(100vh - 80px);
-  padding: 8px 12px;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  padding: 14px;
+  height: 100%;
+  overflow-y: auto;
+  background: #f6f7f9;
 }
 
-.scatterplot {
-  grid-area: scatterplot;
-}
-
-.side-charts {
-  grid-area: sidecharts;
+.card {
+  background: #fff;
+  border: 1px solid #e1e4ea;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  height: 440px;
+  min-width: 0;
+  overflow: hidden;
 }
 
-.side-charts .lda {
-  flex: 2;
+.card-title {
+  font-size: 13px;
+  font-weight: bold;
+  color: #2b3c57;
+  padding: 10px 14px;
+  border-bottom: 1px solid #eef0f3;
 }
 
-.side-charts .barchart {
-  flex: 1;
+.chart {
+  flex: 1 1 0;
+  min-height: 0;
+  position: relative;
 }
 
-.barchart .x_label,
-.barchart .y_label,
-.lda .x_label,
-.lda .y_label {
+.x_label,
+.y_label,
+.axis-label {
   font-size: 12px;
+  fill: #333;
 }
 
 .button {
-    /* 300px: width if the sidepanel defined in the grid-template for #root */
-    /* 40px = 2 times 20px padding in .sidepanel */
-    width: calc(300px - 40px);
-    border-radius: 20px;
-    height: 50px;
-    font-size: 1.2em;
-    font-weight: bold;
+  width: 100%;
+  border-radius: 20px;
+  height: 46px;
+  font-size: 1.05em;
+  font-weight: bold;
+  cursor: pointer;
+  border: 1px solid #b9bfca;
+  background: #fff;
+  margin-top: 8px;
+}
 
-    cursor: pointer;
+.button-small {
+  height: 36px;
+  font-size: 0.9em;
+  border-radius: 6px;
 }
 
 .button:hover {
-    background: rgb(180, 180, 180);
+  background: rgb(225, 228, 234);
 }
 
-input[type=text], select {
-    width: 100%;
-    padding: 12px 20px;
-    margin: 8px 0;
-    display: inline-block;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    box-sizing: border-box;
-  }
+label {
+  font-size: 13px;
+  color: #444;
+}
+
+input[type="text"],
+select {
+  width: 100%;
+  padding: 10px 14px;
+  margin: 6px 0 12px 0;
+  display: inline-block;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
 
 .x_grid line,
 .y_grid line {
-  stroke: #e3e3e3;
+  stroke: #ececec;
 }
 
 .x_grid path,
 .y_grid path {
   stroke: none;
+}
+
+.tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(33, 33, 33, 0.92);
+  color: #fff;
+  padding: 6px 9px;
+  border-radius: 5px;
+  font-size: 11px;
+  line-height: 1.35;
+  opacity: 0;
+  transition: opacity 0.12s;
+  z-index: 10;
+  max-width: 220px;
+}
+
+.hull {
+  fill-opacity: 0.10;
+  stroke-width: 1.5;
+  stroke-opacity: 0.65;
+}
+
+.faded {
+  opacity: 0.12 !important;
 }

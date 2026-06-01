@@ -71,7 +71,7 @@ export function setupConnection(socket) {
       }
 
       let processed = preprocess_boardgames(games, {
-        top_limit: parameters.lda_top_n,
+        classes: parameters.lda_classes,
         lda_dims: parameters.lda_dims,
       })
 
